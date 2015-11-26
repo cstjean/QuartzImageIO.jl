@@ -542,6 +542,31 @@ CFDataCreate(bytes::Array{UInt8,1}) =
 
 ### For output #################################################################
 
+""" Null was returned (in general because a C Call failed) """
+type CNullException <: Exception end
+
+"""
+```
+with_obj(some_c_call()) do result
+   ...
+end
+```
+Binds the result of `some_c_call` to `result`, checks that it's not NULL, 
+executres ..., and calls CFRelease(result)  
+"""
+function with_obj(body_fun, ptr)
+    if ptr == C_NULL
+        throw(CNullException)
+    else
+        try
+            body_fun(ptr)
+        finally
+            CFRelease(ptr)
+        end
+    end
+end
+
+
 """ `check_null(x)`
 
 Triggers an error if `x` is `NULL`, else returns `x` """
