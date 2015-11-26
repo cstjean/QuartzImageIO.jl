@@ -255,8 +255,9 @@ end
 
 ## Saving Images ###############################################################
 
-function save_and_release(cg_img::CGImageRef,
-                          fname, image_type::AbstractString)
+# helper
+function do_save(cg_img::CGImageRef,
+                 fname, image_type::AbstractString)
     with_obj(CFURLCreateWithFileSystemPath(fname)) do out_url
         with_obj(CGImageDestinationCreateWithURL(out_url, image_type, 1)) do out_dest
             CGImageDestinationAddImage(out_dest, cg_img);
@@ -279,14 +280,14 @@ function save_(fname, img::Image, image_type)
     img2 = convert(Image{RGBA{UFixed8}}, img)
     buf = reinterpret(FixedPointNumbers.UInt8, Images.data(img2))
     nx, ny = size(img2)
-    colspace = CGColorSpaceCreateDeviceRGB()
-    bmp_context = CGBitmapContextCreate(buf, nx, ny, 8, nx*4, colspace,
-                                        kCGImageAlphaPremultipliedLast)
-    CFRelease(colspace)
-    cgImage = CGBitmapContextCreateImage(bmp_context)
-    CFRelease(bmp_context)
-    
-    save_and_release(cgImage, fname, image_type)
+    with_obj(CGColorSpaceCreateDeviceRGB()) do colspace
+        with_obj(CGBitmapContextCreate(buf, nx, ny, 8, nx*4, colspace,
+                                       kCGImageAlphaPremultipliedLast)) do bmp_context
+            with_CGImage(CGBitmapContextCreateImage(bmp_context)) do cgImage
+                do_save(cgImage, fname, image_type)
+            end
+        end                           
+    end
 end
 
 function getblob(img::AbstractImage, format)
