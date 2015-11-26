@@ -48,6 +48,31 @@ for format in image_formats
     end)
 end
 
+""" Null was returned (in general because a C Call failed) """
+type CNullException <: Exception end
+
+"""
+```
+with_obj(some_c_call()) do result
+   ...
+end
+```
+Binds the result of `some_c_call` to `result`, checks that it's not NULL, 
+executres ..., and calls CFRelease(result)  
+"""
+function with_obj(body_fun, ptr; release_fun=CFRelease)
+    if ptr == C_NULL
+        throw(CNullException)
+    else
+        try
+            body_fun(ptr)
+        finally
+            release_fun(ptr)
+        end
+    end
+end
+with_CGImage(body_fun, ptr) =
+    with_obj(body_fun, ptr; release_fun=CGImageRelease)
 
 
 function load_(b::Array{UInt8, 1})
@@ -230,14 +255,14 @@ end
 
 ## Saving Images ###############################################################
 
-function save_and_release(cg_img::Ptr{Void}, # CGImageRef
+function save_and_release(cg_img::CGImageRef,
                           fname, image_type::AbstractString)
-    out_url = CFURLCreateWithFileSystemPath(fname);
-    out_dest = CGImageDestinationCreateWithURL(out_url, image_type, 1);
-    CGImageDestinationAddImage(out_dest, cg_img);
-    CGImageDestinationFinalize(out_dest);
-    CFRelease(out_dest)
-    CFRelease(out_url)
+    with_obj(CFURLCreateWithFileSystemPath(fname)) do out_url
+        with_obj(CGImageDestinationCreateWithURL(out_url, image_type, 1)) do out_dest
+            CGImageDestinationAddImage(out_dest, cg_img);
+            CGImageDestinationFinalize(out_dest);
+        end
+    end
     nothing
 end
 
@@ -541,30 +566,6 @@ CFDataCreate(bytes::Array{UInt8,1}) =
     ccall(:CFDataCreate,Ptr{Void},(Ptr{Void},Ptr{UInt8},Csize_t),C_NULL,bytes,length(bytes))
 
 ### For output #################################################################
-
-""" Null was returned (in general because a C Call failed) """
-type CNullException <: Exception end
-
-"""
-```
-with_obj(some_c_call()) do result
-   ...
-end
-```
-Binds the result of `some_c_call` to `result`, checks that it's not NULL, 
-executres ..., and calls CFRelease(result)  
-"""
-function with_obj(body_fun, ptr)
-    if ptr == C_NULL
-        throw(CNullException)
-    else
-        try
-            body_fun(ptr)
-        finally
-            CFRelease(ptr)
-        end
-    end
-end
 
 
 """ `check_null(x)`
